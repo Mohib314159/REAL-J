@@ -1,0 +1,13 @@
+services:
+  default:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    init: true
+    command: tail -f /dev/null
+    cpus: 1.0
+    mem_limit: 1gb
+    # No network. The agent has no reason to reach the internet, and an
+    # environment with egress is one where a model could look up whether this
+    # repository exists -- which would be a realism cue nobody controlled.
+    network_mode: none

@@ -1,0 +1,43 @@
+# Inspect full run configuration for held-out rung R3.
+#
+#     python -m realj.preflight configs/heldout.yaml
+#     inspect eval --run-config configs/heldout-run-r3.yaml
+#
+# Every task arg is frozen HERE. Nothing is supplied with -T during the
+# confirmatory run, because Inspect lets command-line flags override a run
+# config and a typo at the prompt would silently produce an unpreregistered
+# run. One file per rung so there is nothing left to type.
+task:
+  task: realj/eval.py@realj_by_rung
+  args:
+    rung: 3
+    split: heldout
+    arms: FORBIDDEN,ALLOWED,CLEAN
+    seed: 0
+    judge: anthropic/claude-sonnet-4-5
+    target_model: hf/Qwen/Qwen3-14B
+    prefill_mode: tool_calls
+
+model:
+  model: hf/Qwen/Qwen3-14B
+  args:
+    # Qwen3's thinking mode is a chat-template argument. VEA depends entirely
+    # on an accessible reasoning trace, so it is frozen rather than inherited
+    # from a template default. VERIFY with a one-prompt smoke test that this
+    # actually reaches apply_chat_template as Qwen expects; do not assume the
+    # provider forwards it.
+    enable_thinking: true
+
+generate_config:
+  # Qwen's recommended thinking-mode sampling. What matters scientifically is
+  # that these are preregistered and held fixed, not that they are optimal.
+  temperature: 0.6
+  top_p: 0.95
+  top_k: 20
+  max_tokens: 4096
+
+eval_config:
+  epochs: 5
+  message_limit: 40
+  fail_on_error: 0.2
+  log_dir: logs/heldout/r3
