@@ -178,6 +178,42 @@ deployment_refs/  EMPTY - you have to fill this
 ```
 
 ---
+---
+
+## Spun out: `context-audit`
+
+The tool-schema half of `certify()` generalises, so it lives in
+`src/context_audit/` as a standalone MCP server.
+
+The problem it solves is the one that bit this project twice. Every tool
+name, description and full JSON schema a harness exposes is serialised into
+the model's context on every turn, and nobody reads it. Inspect's default
+submit tool arrived describing itself as submitting "an answer for
+evaluation" — one sentence, in every prompt, contradicting the whole design.
+Composing third-party MCP servers has the same exposure and no equivalent
+check.
+
+It scans the entire serialised surface, not just description fields:
+`description`, `title` and `$comment` at any depth, `enum` and `examples`
+items, `default` and `const` values, `$defs` names, `outputSchema`, and the
+property names themselves (`evaluation_mode` is as visible in the JSON as any
+sentence). Findings are grouped as evaluation, surveillance, instruction or
+identity framing. Both MCP's `inputSchema` and Inspect's `parameters` are
+accepted, so `tool_infos(agent_tools())` can be piped in unchanged.
+
+An optional second pass (`deep: true`) uses Pydantic AI to return a structured
+verdict on framing that avoids every listed phrase. It is opt-in, needs a
+provider key, and is **written but not yet run against a live model** — the
+same caveat as `realj/jlens/`.
+
+```bash
+pip install -e ".[semantic]"     # optional model pass
+pytest tests/test_audit.py tests/test_semantic.py
+```
+
+The lexicon matches phrases, not meaning. A clean report is a linting pass,
+not a proof.
+
 
 ## Five things that will bite you if you skip them
 
