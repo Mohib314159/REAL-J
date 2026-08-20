@@ -1,56 +1,17 @@
-[build-system]
-requires = ["setuptools>=68"]
-build-backend = "setuptools.build_meta"
-
 [project]
-name = "real-j"
+name = "context-audit-mcp"
 version = "0.1.0"
-description = "Realism, recognition, verbalization and behaviour in one controlled agentic eval"
-readme = "README.md"
+description = "Audit MCP tool manifests for vocabulary that leaks context to an agent"
 requires-python = ">=3.10"
-license = { text = "MIT" }
-
-# Deliberately thin. The behavioural arms need Inspect and nothing else; the
-# white-box arm needs torch, transformers and Anthropic's jlens reference
-# implementation, and is an optional extra so that a machine without a GPU can
-# still run and analyse the whole behavioural study.
-# PINNED, not floored. The repo was validated against these exact versions;
-# `inspect-ai>=0.3.100` would have allowed a future release to change the
-# react() prompt composition or the tool-schema serialisation and silently
-# alter what the model sees. That is not a hypothetical for this project --
-# a framework-supplied tool description is what leaked "evaluation" in the
-# first place. Bump deliberately, then re-run the leakage tests.
-dependencies = [
-    "inspect-ai==0.3.252",
-]
+dependencies = ["mcp>=1.2.0", "pydantic>=2.0"]
 
 [project.optional-dependencies]
-analysis = [
-    "matplotlib==3.10.8",
-]
-jlens = [
-    # Also pinned for the confirmatory run. Record the resolved versions, the
-    # jacobian-lens commit and the model revision in PREREGISTRATION.md before
-    # freezing; a tokenizer revision change can move token ids and therefore
-    # change what the J score means without any code changing.
-    "torch==2.6.0",
-    "transformers==4.51.3",
-    # jlens is not on PyPI. Install the reference implementation from a
-    # checkout of https://github.com/anthropics/jacobian-lens:
-    #     git clone https://github.com/anthropics/jacobian-lens && \
-    #     pip install -e jacobian-lens
-]
-dev = [
-    "pytest==8.3.4",
-]
+semantic = ["pydantic-ai>=0.0.20"]
+dev = ["pytest>=8.0"]
 
-[tool.setuptools.packages.find]
-include = ["realj*", "analysis*"]
+[project.scripts]
+context-audit-mcp = "context_audit.server:main"
 
-[tool.pytest.ini_options]
-testpaths = ["tests"]
-addopts = "-q"
-
-[tool.ruff]
-line-length = 88
-target-version = "py310"
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
