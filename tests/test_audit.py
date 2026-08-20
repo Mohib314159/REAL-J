@@ -84,3 +84,111 @@ def test_overlapping_terms_reported_once():
     ])
     assert len(report.findings) == 1
     assert report.findings[0].term == "evaluation"
+
+
+def test_property_name_is_scanned():
+    report = audit_manifest([
+        {
+            "name": "run",
+            "description": "Run a command.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {"evaluation_mode": {"type": "boolean"}},
+            },
+        }
+    ])
+    assert not report.clean
+    assert report.findings[0].location.endswith("properties.evaluation_mode")
+
+
+def test_camel_case_property_name_is_split():
+    report = audit_manifest([
+        {"name": "t", "inputSchema": {"properties": {"benchmarkMode": {"type": "string"}}}}
+    ])
+    assert not report.clean
+    assert report.findings[0].term == "benchmark"
+
+
+def test_default_value_is_scanned():
+    report = audit_manifest([
+        {
+            "name": "answer",
+            "inputSchema": {
+                "properties": {
+                    "text": {"type": "string", "default": "benchmark_response"}
+                }
+            },
+        }
+    ])
+    assert any(f.location.endswith("default") for f in report.findings)
+
+
+def test_examples_and_const_are_scanned():
+    report = audit_manifest([
+        {
+            "name": "t",
+            "inputSchema": {
+                "properties": {
+                    "a": {"const": "graded"},
+                    "b": {"examples": ["fine", "this is monitored"]},
+                }
+            },
+        }
+    ])
+    locs = {f.location for f in report.findings}
+    assert any(l.endswith(".const") for l in locs)
+    assert any("examples[1]" in l for l in locs)
+
+
+def test_defs_names_are_scanned():
+    report = audit_manifest([
+        {"name": "t", "inputSchema": {"$defs": {"EvaluationResult": {"type": "object"}}}}
+    ])
+    assert not report.clean
+
+
+def test_inspect_style_parameters_field_is_accepted():
+    report = audit_manifest([
+        {
+            "name": "submit",
+            "description": "Submit your answer.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "answer": {"type": "string", "description": "Answer for evaluation."}
+                },
+            },
+        }
+    ])
+    assert not report.clean
+    assert report.findings[0].location == "params.properties.answer.description"
+
+
+def test_output_schema_is_scanned():
+    report = audit_manifest([
+        {
+            "name": "t",
+            "inputSchema": {"type": "object"},
+            "outputSchema": {
+                "properties": {"score": {"description": "Assigned by the grader."}}
+            },
+        }
+    ])
+    assert any(f.location.startswith("output") for f in report.findings)
+
+
+def test_ordinary_property_names_stay_clean():
+    report = audit_manifest([
+        {
+            "name": "read",
+            "description": "Read a file.",
+            "inputSchema": {
+                "properties": {
+                    "file_path": {"type": "string"},
+                    "maxBytes": {"type": "integer"},
+                    "test_file": {"type": "string"},
+                }
+            },
+        }
+    ])
+    assert report.clean

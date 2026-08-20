@@ -146,25 +146,62 @@ def scan_text(text: str, tool: str, location: str) -> Iterator[Finding]:
         )
 
 
+# Schema keywords whose *string values* the model reads as prose or as data.
+PROSE_KEYS = ("description", "title", "$comment")
+VALUE_KEYS = ("default", "const")
+LIST_VALUE_KEYS = ("enum", "examples")
+
+# Keywords whose *keys* name things the model sees: property names appear in
+# the serialised schema, and so do the names under $defs.
+NAME_CONTAINERS = ("properties", "patternProperties", "$defs", "definitions")
+
+
+def _split_identifier(name: str) -> str:
+    """Turn `evaluation_mode` / `evaluationMode` into scannable words.
+
+    A property name is model-visible text even though nobody writes it as
+    prose. Splitting on case and separators lets the same lexicon apply
+    without a second word list.
+    """
+    spaced = re.sub(r"([a-z0-9])([A-Z])", r"\1 \2", name)
+    return re.sub(r"[_\-./]+", " ", spaced)
+
+
 def walk_schema(node: Any, tool: str, path: str) -> Iterator[tuple[str, str]]:
     """Yield (location, text) for every string a model could read.
 
-    Descriptions and enum values are both model-visible. Keys are not scanned
-    as prose -- a property named `evaluation_mode` is a naming choice, not
-    framing -- but its description and enum values are.
+    The whole serialised schema reaches the model, not just the description
+    fields. That includes values the caller never thinks of as prose --
+    a `default` of "benchmark_response", a `const`, an item in `examples` --
+    and the property names themselves, since `evaluation_mode` is as visible
+    in the JSON as any sentence. Property names are split into words before
+    scanning so the ordinary lexicon applies to them.
     """
     if isinstance(node, dict):
-        for key in ("description", "title", "$comment"):
+        for key in PROSE_KEYS:
             val = node.get(key)
             if isinstance(val, str):
                 yield f"{path}.{key}", val
-        enum = node.get("enum")
-        if isinstance(enum, list):
-            for i, item in enumerate(enum):
-                if isinstance(item, str):
-                    yield f"{path}.enum[{i}]", item
+        for key in VALUE_KEYS:
+            val = node.get(key)
+            if isinstance(val, str):
+                yield f"{path}.{key}", val
+        for key in LIST_VALUE_KEYS:
+            items = node.get(key)
+            if isinstance(items, list):
+                for i, item in enumerate(items):
+                    if isinstance(item, str):
+                        yield f"{path}.{key}[{i}]", item
+
+        for container in NAME_CONTAINERS:
+            block = node.get(container)
+            if isinstance(block, dict):
+                for prop_name in block:
+                    yield f"{path}.{container}.{prop_name}", _split_identifier(prop_name)
+
+        skip = set(PROSE_KEYS) | set(VALUE_KEYS) | set(LIST_VALUE_KEYS)
         for key, val in node.items():
-            if key in {"description", "title", "$comment", "enum"}:
+            if key in skip:
                 continue
             if isinstance(val, (dict, list)):
                 yield from walk_schema(val, tool, f"{path}.{key}")
@@ -187,9 +224,19 @@ def audit_manifest(tools: Sequence[dict[str, Any]], server: str = "unknown") -> 
         desc = tool.get("description")
         if isinstance(desc, str):
             surfaces.append(("description", desc))
-        schema = tool.get("inputSchema") or tool.get("input_schema")
-        if isinstance(schema, dict):
-            surfaces.extend(walk_schema(schema, name, "params"))
+        # MCP uses `inputSchema`; Inspect's ToolInfo serialises `parameters`.
+        # Accepting both means a harness manifest can be piped in unchanged.
+        seen_input = False
+        for field_name in ("inputSchema", "input_schema", "parameters"):
+            schema = tool.get(field_name)
+            if isinstance(schema, dict) and not seen_input:
+                surfaces.extend(walk_schema(schema, name, "params"))
+                seen_input = True
+        for field_name in ("outputSchema", "output_schema"):
+            schema = tool.get(field_name)
+            if isinstance(schema, dict):
+                surfaces.extend(walk_schema(schema, name, "output"))
+                break
         for location, text in surfaces:
             report.characters_scanned += len(text)
             report.findings.extend(scan_text(text, name, location))

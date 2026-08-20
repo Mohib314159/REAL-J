@@ -3,10 +3,15 @@ name = "context-audit-mcp"
 version = "0.1.0"
 description = "Audit MCP tool manifests for vocabulary that leaks context to an agent"
 requires-python = ">=3.10"
-dependencies = ["mcp>=1.2.0", "pydantic>=2.0"]
+dependencies = ["mcp>=2.0.0", "pydantic>=2.0"]
 
 [project.optional-dependencies]
-semantic = ["pydantic-ai>=0.0.20"]
+# pydantic-ai-slim, not the full package: the umbrella `pydantic-ai` pulls its
+# own MCP extras transitively and an unpinned install resolved to a version
+# that downgraded the MCP SDK this server runs on, breaking its imports.
+# Slim plus one provider extra keeps the two dependency trees apart.
+semantic = ["pydantic-ai-slim[anthropic]>=2.32.0,<3"]
+semantic-openai = ["pydantic-ai-slim[openai]>=2.32.0,<3"]
 dev = ["pytest>=8.0"]
 
 [project.scripts]
